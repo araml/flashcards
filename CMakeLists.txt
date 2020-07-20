@@ -4,7 +4,7 @@ project(flashcard_px)
 
 find_library(SDL2 SDL2)
 
-set(CMAKE_CXX_FLAGS "-ggdb")
+set(CMAKE_CXX_FLAGS "-ggdb -std=c++17")
 
 macro(add_files name)
     file(GLOB ${name} src/${name}/*.h src/${name}/*.cpp)
