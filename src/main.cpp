@@ -20,20 +20,23 @@ void generate_schema(sql_handle &h) {
     // TODO: Check if db exists already.
     std::string version = "create table version (idx int primary key not null);";
     std::string language = "create table languages (idx int primary key not null,"
-                           "deck_idx int, name text not null,"
-                           "foreign key(deck_idx) references word(idx));";
-    std::string words = "create table words (idx int primary key not null,"
-                        "word text not null);";
+                           "name text not null);";
+    std::string decks = "create table decks (idx int primary key not null,"
+                        "lang_idx int, name text not null,"
+                        "foreign key(lang_idx) references languages(idx));";
 
-    /*std::string folder =
-        "create table folder (idx int primary key not null"
-        "name text not null,"
-        "parent_id int,"
-        "foreign key(parent_id) references folder(id);";
-    */
+    std::string words = "create table words (idx int primary key not null,"
+                                            "word text not null);";
+
+    std::string deck_word = "create table deck_word (word_idx int, deck_idx int,"
+                            "foreign key(word_idx) references words(idx),"
+                            "foreign key(deck_idx) references decks(idx));";
+
     create_table(h, version);
-    create_table(h, words);
     create_table(h, language);
+    create_table(h, decks);
+    create_table(h, words);
+    create_table(h, deck_word);
 }
 
 template <typename T>
@@ -136,9 +139,9 @@ void close_sql(sql_handle &h) {
 int main() {
     sql_handle handle;
     insert_into(handle, "languages", "Param name 1", "Param 1", "Param name 2", "Param 2");
-    /*
+
     init_sql(handle);
     generate_schema(handle);
     close_sql(handle);
-    */
+
 }
