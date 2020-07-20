@@ -8,6 +8,10 @@ struct sql_handle {
     sqlite3 *handle{nullptr};
 };
 
+struct sql_statement {
+    sqlite3_stmt *stmt{nullptr};
+};
+
 void create_table(sql_handle &h, const std::string &table) {
     sqlite3_stmt *stmt;
     const char *unused;
@@ -39,26 +43,30 @@ void generate_schema(sql_handle &h) {
     create_table(h, deck_word);
 }
 
-template <typename T>
-void insert_names(std::string &s, const T &name) {
-    s += std::string(name);
-}
 
 template <typename H, typename... T>
 void insert_names(std::string &s, H &h, const T &... names) {
-    s += std::string(h) + ", ";
-    insert_names(s, names...);
-}
-
-template <typename T>
-void insert_values(std::string &s, const T &name) {
-    s += std::string(name);
+    if constexpr (sizeof...(names) > 1) {
+        s += std::string(h) + ", ";
+        insert_names(s, names...);
+    } else {
+        s+= std::string(h);
+    }
 }
 
 template <typename H, typename... T>
-void insert_values(std::string &s, const H &h, const T &... names) {
-    s += std::string(h) + ", ";
-    insert_values(s, names...);
+void insert_values(sql_statement &s, int idx, const H &h, const T &... names) {
+    if constexpr (std::is_integral_v<H>) {
+        sqlite3_bind_int(s.stmt, idx, h);
+    } else if (std::is_floating_point_v<H>) {
+        sqlite3_bind_double(s.stmt, idx, h);
+    } else {
+        sqlite3_bind_text(s.stmt, idx, h.c_str(), SQLITE_TRANSIENT);
+    }
+
+    if constexpr (sizeof...(names) > 1) {
+        insert_values(s, ++idx, names...);
+    }
 }
 
 template <typename T, size_t... indices>
@@ -69,8 +77,9 @@ void add_parameter_names(std::string &s, const T &tpl, std::index_sequence<indic
 }
 
 template <typename T, size_t... indices>
-void add_parameters(std::string &s, const T &tpl, std::index_sequence<indices...>) {
-    insert_values(s, std::get<indices>(tpl)...);
+void add_parameters(sql_statement &s,
+                    const T &tpl, std::index_sequence<indices...>) {
+    insert_values(s, 1, std::get<indices>(tpl)...);
 }
 
 
@@ -104,6 +113,16 @@ constexpr auto filter_odd(index_sequence<indexes...>) {
             [] (size_t i) constexpr { return i % 2; }) + ...);
 }
 
+template <size_t v>
+constexpr void params(std::string &s) {
+    s += "? ";
+    if constexpr (v > 1) {
+        params<v - 1>(s);
+    } else {
+        s += ") ";
+    }
+}
+
 template <typename ...T>
 void insert_into(sql_handle &h, const std::string table_name, T&&... args) {
     if (sizeof...(args) % 2 != 0) {
@@ -119,8 +138,20 @@ void insert_into(sql_handle &h, const std::string table_name, T&&... args) {
     std::string sql_code = "insert into " + table_name;
     add_parameter_names(sql_code, forward_as_tuple(std::forward<T>(args)...),
                         even_sequence);
-    add_parameters(sql_code, forward_as_tuple(std::forward<T>(args)...),
-                   odd_sequence);
+
+    sql_code += " VALUES (";
+    params<N / 2>(sql_code);
+
+    std::cout << "statement " << sql_code << std::endl;
+    sql_statement stmt;
+    const char *unused;
+    sqlite3_prepare_v2(h.handle, sql_code.c_str(), sql_code.size(), &stmt.stmt, &unused);
+    add_parameters(stmt, forward_as_tuple(std::forward<T>(args)...), odd_sequence);
+
+    std::cout << "Inserting" << std::endl;
+    std::cout << sqlite3_sql(stmt.stmt) << std::endl;
+    while (sqlite3_step(stmt.stmt) != SQLITE_DONE) {}
+    sqlite3_finalize(stmt.stmt);
     std::cout << sql_code << std::endl;
 }
 
@@ -138,10 +169,9 @@ void close_sql(sql_handle &h) {
 
 int main() {
     sql_handle handle;
-    insert_into(handle, "languages", "Param name 1", "Param 1", "Param name 2", "Param 2");
-
     init_sql(handle);
     generate_schema(handle);
+    insert_into(handle, "version", "idx", 1);
     close_sql(handle);
 
 }
