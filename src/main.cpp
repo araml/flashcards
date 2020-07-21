@@ -12,16 +12,18 @@ struct sql_statement {
     sqlite3_stmt *stmt{nullptr};
 };
 
-void create_table(sql_handle &h, const std::string &table) {
-    sqlite3_stmt *stmt;
-    const char *unused;
-    sqlite3_prepare_v2(h.handle, table.c_str(), table.size(), &stmt, &unused);
-    while (sqlite3_step(stmt) != SQLITE_DONE) {}
-    sqlite3_finalize(stmt);
+auto empty_callback = [] (void *, int, char **, char **) { return 0; };
+
+int create_table(sql_handle &h,  const std::string &table) {
+    char *error;
+    if (sqlite3_exec(h.handle, table.c_str(), empty_callback, nullptr, &error)
+        != SQLITE_OK) {
+        return 1;
+    }
+    return 0;
 }
 
-void generate_schema(sql_handle &h) {
-    // TODO: Check if db exists already.
+int generate_schema(sql_handle &h) {
     std::string version = "create table version (idx int primary key not null);";
     std::string language = "create table languages (idx int primary key not null,"
                            "name text not null);";
@@ -36,11 +38,16 @@ void generate_schema(sql_handle &h) {
                             "foreign key(word_idx) references words(idx),"
                             "foreign key(deck_idx) references decks(idx));";
 
-    create_table(h, version);
-    create_table(h, language);
-    create_table(h, decks);
-    create_table(h, words);
-    create_table(h, deck_word);
+
+    int return_value = 0;
+
+    return_value += create_table(h, version);
+    return_value += create_table(h, language);
+    return_value += create_table(h, decks);
+    return_value += create_table(h, words);
+    return_value += create_table(h, deck_word);
+
+    return return_value;
 }
 
 
@@ -156,6 +163,21 @@ void insert_into(sql_handle &h, const std::string table_name, T&&... args) {
 }
 
 
+/* We try to query the db, if it succeeds we must have already created the
+ * schema.
+ */
+bool database_already_exists(sql_handle &h) {
+    char *err;
+    const char select_version[] = "select * from version;";
+    if (sqlite3_exec(h.handle, select_version,
+                 [](void *, int, char **, char **) -> int { return 0; },
+                 nullptr, &err) == SQLITE_OK) {
+        return true;
+    }
+
+    return false;
+}
+
 void init_sql(sql_handle &h) {
     std::cout << "Open\n";
     std::cout << sqlite3_open("database.db", &h.handle) << std::endl;
@@ -170,8 +192,12 @@ void close_sql(sql_handle &h) {
 int main() {
     sql_handle handle;
     init_sql(handle);
-    generate_schema(handle);
-    insert_into(handle, "version", "idx", 1);
+
+    if (!database_already_exists(handle)) {
+        generate_schema(handle);
+        insert_into(handle, "version", "idx", 1);
+    }
+
     close_sql(handle);
 
 }

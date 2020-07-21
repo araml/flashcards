@@ -2,6 +2,6 @@
 rm -rf build
 mkdir build
 cd build
-cmake ..
-cmake --build . -- -j16
+cmake -G Ninja ..
+ninja
 
