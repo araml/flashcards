@@ -16,15 +16,18 @@ struct sql_statement {
     sqlite3_stmt *stmt{nullptr};
 };
 
+auto empty_callback = [] (void *, int, char **, char **) { return 0; };
+
 int create_table(sql_db &d, const std::string &table);
 int generate_schema(sql_db &d);
-bool database_already_exists(sql_db &d);
+int database_already_exists(sql_db &d);
 void init_sql(sql_db &d);
 void close_sql(sql_db &d);
 
 template <typename H, typename... T>
 void insert_names(std::string &s, H &h, const T &... names) {
-    if constexpr (sizeof...(names) > 1) {
+    std::cout << "name " << h << std::endl;
+    if constexpr (sizeof...(names)) {
         s += std::string(h) + ", ";
         insert_names(s, names...);
     } else {
@@ -44,7 +47,7 @@ void insert_values(sql_statement &s, int idx, const H &h, const T &... names) {
         sqlite3_bind_text(s.stmt, idx, h, std::string(h).size(), SQLITE_TRANSIENT);
     }
 
-    if constexpr (sizeof...(names) > 1) {
+    if constexpr (sizeof...(names)) {
         insert_values(s, ++idx, names...);
     }
 }
@@ -97,7 +100,7 @@ template <size_t v>
 constexpr void params(std::string &s) {
     s += "?";
     if constexpr (v > 1) {
-        s += " ";
+        s += ", ";
         params<v - 1>(s);
     }
 }
@@ -118,6 +121,8 @@ void insert_into(sql_db &d, const std::string table_name, T&&... args) {
     add_parameter_names(sql_code, forward_as_tuple(std::forward<T>(args)...),
                         even_sequence);
 
+    std::cout << "N " << N << std::endl;
+
     sql_code += " VALUES (";
     params<N / 2>(sql_code);
     sql_code += ") ";
@@ -129,6 +134,7 @@ void insert_into(sql_db &d, const std::string table_name, T&&... args) {
     << std::endl;
     if (!stmt.stmt)
         std::cout << "STATEMENT ERROR " << std::endl;
+    std::cout << sqlite3_errmsg(d.db) << std::endl;
 
     add_parameters(stmt, forward_as_tuple(std::forward<T>(args)...), odd_sequence);
 
@@ -146,6 +152,17 @@ void insert_into(sql_db &d, const std::string table_name, T&&... args) {
     }
     sqlite3_finalize(stmt.stmt);
     std::cout << sql_code << std::endl;
+}
+
+template <typename T = decltype(empty_callback)>
+int select_from(sql_db &d, const std::string &query,
+                T callback = empty_callback, void *callback_data = nullptr) {
+    char *err;
+    if (sqlite3_exec(d.db, query.c_str(), callback, callback_data, &err) == SQLITE_OK) {
+        return 1;
+    }
+
+    return 0;
 }
 
 

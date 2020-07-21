@@ -3,8 +3,6 @@
 
 sql_db d;
 
-auto empty_callback = [] (void *, int, char **, char **) { return 0; };
-
 int create_table(sql_db &d, const std::string &table) {
     char *error;
     if (sqlite3_exec(d.db, table.c_str(), empty_callback, nullptr, &error)
@@ -16,8 +14,8 @@ int create_table(sql_db &d, const std::string &table) {
 
 int generate_schema(sql_db &d) {
     std::string version = "create table version (idx integer primary key not null);";
-    std::string language = "create table languages (idx integer primary key not null,"
-                           "name text not null);";
+    std::string language = "create table languages (idx integer not null,"
+                           "name text not null, primary key(idx, name));";
     std::string decks = "create table decks (idx integer primary key not null,"
                         "lang_idx int, name text not null,"
                         "foreign key(lang_idx) references languages(idx));";
@@ -41,22 +39,16 @@ int generate_schema(sql_db &d) {
     return return_value;
 }
 
-
-
-
 /* We try to query the db, if it succeeds we must have already created the
  * schema.
  */
-bool database_already_exists(sql_db &d) {
-    char *err;
-    const char select_version[] = "select * from version;";
-    if (sqlite3_exec(d.db, select_version,
-                 [](void *, int, char **, char **) -> int { return 0; },
-                 nullptr, &err) == SQLITE_OK) {
-        return true;
+int database_already_exists(sql_db &d) {
+    //const char select_version[] = "select * from version;";
+    if (select_from(d, "select * from version;")) {
+        return 1;
     }
 
-    return false;
+    return 0;
 }
 
 void init_sql(sql_db &d) {

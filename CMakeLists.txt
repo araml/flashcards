@@ -14,8 +14,9 @@ endmacro()
 set(sqlite "${CMAKE_CURRENT_SOURCE_DIR}/sqlite")
 
 include_directories(${sqlite})
+include_directories(src)
 
-add_executable(flashcard_px src/main.cpp)
+add_executable(flashcard_px src/main.cpp src/sql.cpp)
 
 target_link_libraries(flashcard_px "ncursesw" "pthread" "dl" "GL" "GLU" "rt")
 
