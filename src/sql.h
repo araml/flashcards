@@ -9,6 +9,7 @@
 #include <utility>
 
 struct sql_db {
+    std::string name{"database.db"};
     sqlite3 *db{nullptr};
 };
 
@@ -21,8 +22,8 @@ auto empty_callback = [] (void *, int, char **, char **) { return 0; };
 int create_table(sql_db &d, const std::string &table);
 int generate_schema(sql_db &d);
 int database_already_exists(sql_db &d);
-void init_sql(sql_db &d);
-void close_sql(sql_db &d);
+void open_db(sql_db &d);
+void close_db(sql_db &d);
 
 template <typename H, typename... T>
 void insert_names(std::string &s, H &h, const T &... names) {
@@ -117,34 +118,28 @@ void insert_into(sql_db &d, const std::string table_name, T&&... args) {
     auto odd_sequence = filter_odd(indices);
     auto even_sequence = filter_even(indices);
 
-    std::string sql_code = "insert into " + table_name;
+    std::string sql_code = "insert or ignore into " + table_name;
     add_parameter_names(sql_code, forward_as_tuple(std::forward<T>(args)...),
                         even_sequence);
-
-    std::cout << "N " << N << std::endl;
 
     sql_code += " VALUES (";
     params<N / 2>(sql_code);
     sql_code += ") ";
 
-    std::cout << "statement " << sql_code << std::endl;
     sql_statement stmt;
     const char *unused;
-    std::cout << sqlite3_prepare_v2(d.db, sql_code.c_str(), sql_code.size(), &stmt.stmt, &unused)
-    << std::endl;
+    std::cout << "prepare error : " <<
+                sqlite3_prepare_v2(d.db, sql_code.c_str(), sql_code.size(),
+                                    &stmt.stmt, &unused) << std::endl;
     if (!stmt.stmt)
         std::cout << "STATEMENT ERROR " << std::endl;
     std::cout << sqlite3_errmsg(d.db) << std::endl;
 
     add_parameters(stmt, forward_as_tuple(std::forward<T>(args)...), odd_sequence);
 
-    std::cout << "Inserting" << std::endl;
-    std::cout << unused << std::endl;
-    std::cout << sqlite3_sql(stmt.stmt) << std::endl;
-    std::cout << "hmm " << std::endl;
     while (true) {
         auto val = sqlite3_step(stmt.stmt);
-        std::cout << val << std::endl;
+        std::cout << "step val : " << val << std::endl;
         if (val == SQLITE_DONE)
             break;
         else
