@@ -5,6 +5,10 @@
 #include <vector>
 #include <string>
 #include <filesystem>
+#include <unistd.h>
+
+#include <sys/ioctl.h>
+#include <signal.h>
 
 #include <csv.h>
 
@@ -30,13 +34,113 @@ bool cmp_str(const std::string &s1, const std::string &s2) {
     return s1 == s2;
 }
 
-int main() {
-    for (auto &p : fs::directory_iterator("..", fs::directory_options::follow_directory_symlink)) {
-        std::cout << p.path().string();
+void sig_winch([[gnu::unused]] int irq) {
+    return;
+}
+
+int height, width;
+
+std::vector<std::string> list_dir(const string& path) {
+    std::vector<std::string> paths{".", ".."};
+    for (auto &p : fs::directory_iterator(path)) {
+        paths.emplace_back(p.path().string());
         if (fs::is_directory(p))
-            std::cout << "/";
-        std::cout << std::endl;
+            paths.back() += "/";
     }
+
+    return paths;
+}
+
+int main() {
+    struct winsize max;
+    ioctl(1, TIOCGWINSZ, &max);
+    height = max.ws_row;
+    width = max.ws_col;
+    setlocale(LC_ALL, "");
+    initscr();
+    curs_set(0);
+    noecho();
+    cbreak();
+    signal(SIGWINCH, sig_winch);
+    start_color();
+    use_default_colors();
+    init_pair(1, COLOR_BLACK, COLOR_WHITE);
+    keypad(stdscr, TRUE);
+    #define REVERSE_COLOR 1
+
+    WINDOW *w_search = newwin(height, width, 0, 0);
+    WINDOW *w_decks = newwin(height, width, 0, 0);
+
+    size_t selected = 0;
+
+    attron(COLOR_PAIR(0));
+
+    auto paths = list_dir(".");
+
+    bool deck_window = true;
+    bool quit = false;
+    int c;
+    while (!quit) {
+        size_t i = 0;
+
+        if (!deck_window) {
+            for (auto &w : paths) {
+
+                if (i == selected) {
+                    wattron(w_decks, COLOR_PAIR(REVERSE_COLOR));
+                }
+
+                mvwprintw(w_search, i, 0, w.c_str());
+
+                if (i == selected) {
+                    wattroff(w_decks, COLOR_PAIR(REVERSE_COLOR));
+                }
+
+                i++;
+            }
+            c = wgetch(w_search);
+        } else {
+            mvwprintw(w_decks, i, 0, "Decks");
+            c = wgetch(w_decks);
+        }
+
+
+        switch(c) {
+            case '1':
+                deck_window = true;
+                wclear(w_search);
+                clear();
+                break;
+            case '2':
+                deck_window = false;
+                wclear(w_decks);
+                clear();
+                break;
+            case 'q':
+                quit = true;
+                break;
+            case KEY_DOWN:
+                if (selected + 1 < paths.size())
+                    selected++;
+                break;
+            case KEY_UP:
+                if (selected > 0)
+                    selected--;
+                break;
+            case 10:
+                chdir(paths[selected].c_str());
+                paths = list_dir(".");
+                selected = 0;
+                i = 0;
+                clear();
+                break;
+        }
+    }
+
+    endwin();
+}
+
+/*
 
     auto www = open_csv("rs.csv");
     for (auto ww : www) {
@@ -48,8 +152,9 @@ int main() {
 
     return 0;
 
-    sql_db db;
-    open_db(db);
+
+   sql_db db;
+open_db(db);
 
     if (!database_already_exists(db)) {
         generate_schema(db);
@@ -95,5 +200,4 @@ int main() {
     insert_into(db, "deck_word", "word_idx", word_idx, "deck_idx", deck_idx);
 
     close_db(db);
-
-}
+    */
