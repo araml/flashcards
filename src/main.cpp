@@ -4,6 +4,7 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
+#include <algorithm>
 #include <filesystem>
 #include <unistd.h>
 
@@ -40,16 +41,103 @@ void sig_winch([[gnu::unused]] int irq) {
 
 int height, width;
 
-std::vector<std::string> list_dir(const string& path) {
-    std::vector<std::string> paths{".", ".."};
-    for (auto &p : fs::directory_iterator(path)) {
-        paths.emplace_back(p.path().string());
-        if (fs::is_directory(p))
-            paths.back() += "/";
+template <typename T, typename Predicate>
+std::vector<T> filter(const std::vector<T> &v, Predicate p) {
+    std::vector<T> filtered;
+    std::copy_if(v.begin(), v.end(), std::back_inserter(filtered), p);
+    return filtered;
+}
+
+template <typename R, typename T, typename Predicate>
+std::vector<R> map(const std::vector<T> &v, Predicate p) {
+    std::vector<R> mapd(v.size());
+    std::transform(v.begin(), v.end(), mapd.begin(), p);
+    return mapd;
+}
+
+std::vector<std::string> list_dir(const fs::path &p) {
+    fs::directory_iterator it = fs::directory_iterator(p);
+
+    // Sort by directories first and common files later
+    std::vector<fs::path> paths(begin(it), end(it));
+    std::sort(paths.begin(), paths.end(), [](const fs::path &p1,
+                                             const fs::path &p2) {
+                return (fs::is_directory(p1) && fs::is_directory(p2) &&
+                    (p1 < p2)) || (fs::is_directory(p1) && !fs::is_directory(p2));
+            });
+
+    // Agregamos el "/"
+    std::vector<std::string> pstr = map<std::string>(paths,
+            [] (const fs::path &p1) {
+                return fs::is_directory(p1) ? p1.filename().string() + "/"
+                : p1.filename().string();
+            });
+
+    pstr = filter(pstr,
+            [] (const string &s) {
+                return fs::is_directory(s) || s.ends_with(".csv");
+            });
+
+    // We filter out all the hidden files.
+    pstr.erase(std::remove_if(pstr.begin(), pstr.end(),
+                [] (const string &s) {
+                    if (s.size() && s[0] == '.')
+                        return true;
+                    return false;
+                }), pstr.end());
+
+    pstr.insert(pstr.begin(), "../");
+    return pstr;
+}
+
+class window {
+public:
+    window(int width, int height)
+        : width(width),
+          height(height)
+    {
+        w = newwin(height, width, 0, 0);
+        keypad(w, true);
     }
 
-    return paths;
-}
+    ~window() {
+        delwin(w);
+    }
+
+    void resize(int, int) { }
+
+    void clear() {
+        wclear(w);
+    }
+
+    void refresh() {
+        wrefresh(w);
+    }
+
+    void write(int x, int y, const char *fmt, ...) {
+        wmove(w, x, y);
+        va_list args;
+        va_start(args, fmt);
+        vw_printw(w, fmt, args);
+        va_end(args);
+    }
+
+    int read_char() {
+        return wgetch(w);
+    }
+
+    void set_attr(int attr) {
+        wattron(w, attr);
+    }
+
+    void unset_attr(int attr) {
+        wattroff(w, attr);
+    }
+
+private:
+    WINDOW *w;
+    int width, height;
+};
 
 int main() {
     struct winsize max;
@@ -64,18 +152,18 @@ int main() {
     signal(SIGWINCH, sig_winch);
     start_color();
     use_default_colors();
-    init_pair(1, COLOR_BLACK, COLOR_WHITE);
-    keypad(stdscr, TRUE);
+    init_pair(1, COLOR_WHITE, COLOR_BLUE);
+    keypad(stdscr, true);
     #define REVERSE_COLOR 1
 
-    WINDOW *w_search = newwin(height, width, 0, 0);
-    WINDOW *w_decks = newwin(height, width, 0, 0);
+    window search_window = window(width, height);
+    window deck_w = window(width, height);
 
     size_t selected = 0;
 
-    attron(COLOR_PAIR(0));
+    //attron(COLOR_PAIR(0));
 
-    auto paths = list_dir(".");
+    auto paths = list_dir(fs::current_path());
 
     bool deck_window = true;
     bool quit = false;
@@ -85,36 +173,34 @@ int main() {
 
         if (!deck_window) {
             for (auto &w : paths) {
-
                 if (i == selected) {
-                    wattron(w_decks, COLOR_PAIR(REVERSE_COLOR));
+                    search_window.set_attr(COLOR_PAIR(REVERSE_COLOR));
                 }
 
-                mvwprintw(w_search, i, 0, w.c_str());
+                search_window.write(i, 0, w.c_str());
 
                 if (i == selected) {
-                    wattroff(w_decks, COLOR_PAIR(REVERSE_COLOR));
+                    search_window.unset_attr(COLOR_PAIR(REVERSE_COLOR));
                 }
 
                 i++;
             }
-            c = wgetch(w_search);
+            c = search_window.read_char();
         } else {
-            mvwprintw(w_decks, i, 0, "Decks");
-            c = wgetch(w_decks);
+            deck_w.write(i, 0, "Decks");
+            c = deck_w.read_char();
         }
 
 
         switch(c) {
             case '1':
                 deck_window = true;
-                wclear(w_search);
-                clear();
+                search_window.clear();
+
                 break;
             case '2':
                 deck_window = false;
-                wclear(w_decks);
-                clear();
+                deck_w.clear();
                 break;
             case 'q':
                 quit = true;
@@ -132,7 +218,7 @@ int main() {
                 paths = list_dir(".");
                 selected = 0;
                 i = 0;
-                clear();
+                search_window.clear();
                 break;
         }
     }
