@@ -156,7 +156,7 @@ deck load_deck(const std::string &path) {
     return d;
 }
 
-std::vector<std::string> controls {
+std::vector<std::string> control_str {
     "Decks   : 1",
     "Browser : 2",
     "Config  : 3",
@@ -180,10 +180,14 @@ int main() {
     start_color();
     use_default_colors();
     init_pair(1, COLOR_WHITE, COLOR_BLUE);
+    init_pair(2, COLOR_BLUE, -1);
+    init_pair(3, COLOR_BLUE, COLOR_BLUE);
     keypad(stdscr, true);
     //#define REVERSE_COLOR 1
 
     unsigned int reverse_color = COLOR_PAIR(1);
+    unsigned int blue_thin = COLOR_PAIR(2);
+    unsigned int blue_thick = COLOR_PAIR(3);
 
     window search_window = window(width, height);
     int deck_tree_w = width / 3;
@@ -206,9 +210,9 @@ int main() {
     deck d;
     while (!quit) {
         size_t i = 1;
-        search_window.cwrite(0, 0, "Browser", reverse_color | A_BOLD);
-        wbkgdset(search_window.get_native_window(), 0);
         if (!deck_window) {
+            search_window.cwrite(0, 0, "Browser", reverse_color | A_BOLD);
+            wbkgdset(search_window.get_native_window(), 0);
             for (auto &w : paths) {
                 if (i - 1 == selected)
                     search_window.cwrite(i, 0, w.c_str(), reverse_color | A_BOLD);
@@ -223,24 +227,29 @@ int main() {
             wrefresh(search_window.get_native_window());
             c = getch(); //search_window.read_char();
         } else {
-            deck_tree.write(0, 0, d.name.c_str());
+            deck_tree.cwrite(0, 0, "Decks", reverse_color | A_BOLD);
             size_t k = 1;
             for (auto w : d.words) {
                 deck_tree.write(k, 0, std::string(w.untranslated + " " + w.translated).c_str());
                 k++;
             }
 
+            mvaddch(0, deck_tree_w, blue_thick | ACS_VLINE);
             for (int k = 1; k < height; k++) {
-                mvaddch(k, deck_tree_w, ACS_VLINE);
+                mvaddch(k, deck_tree_w, blue_thin | ACS_VLINE);
             }
 
             wborder(controls.get_native_window(), 0, 0, 0, 0, 0, 0, 0, 0);
-            std::string cfg = "[configuration]";
+            std::string cfg = "[Controls]";
             int position = ((size_t)control_w - cfg.size()) / 2;
             controls.write(0, position, cfg.c_str());
             mvprintw(30, 30, "%d", (flash_card_w - control_w) / 2);
             mvwin(controls.get_native_window(), (height - flash_card_w / 9) / 2,
                                                 deck_tree_w + (flash_card_w - control_w) / 2);
+
+            for (size_t i = 0; i < control_str.size(); i++) {
+                controls.write(i + 1, 3, control_str[i].c_str());
+            }
 
             refresh();
             wrefresh(deck_tree.get_native_window());
