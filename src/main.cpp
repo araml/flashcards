@@ -156,6 +156,16 @@ deck load_deck(const std::string &path) {
     return d;
 }
 
+std::vector<std::string> controls {
+    "Decks   : 1",
+    "Browser : 2",
+    "Config  : 3",
+    "Add     : A",
+    "Select  : Enter",
+    "Delete  : Shift + D",
+    "Quit    : Esc / q",
+};
+
 int main() {
     struct winsize max;
     ioctl(1, TIOCGWINSZ, &max);
@@ -180,6 +190,8 @@ int main() {
     int flash_card_w = width - deck_tree_w - 1;
     window deck_tree = window(deck_tree_w, height);
     window flash_card = window(flash_card_w, height);
+    int control_w = flash_card_w / 2;
+    window controls = window(control_w, flash_card_w / 5);
 
     size_t selected = 0;
 
@@ -204,7 +216,11 @@ int main() {
 
                 i++;
             }
-            c = search_window.read_char();
+
+
+            refresh();
+            wrefresh(search_window.get_native_window());
+            c = getch(); //search_window.read_char();
         } else {
             deck_tree.write(0, 0, d.name.c_str());
             size_t k = 1;
@@ -217,8 +233,13 @@ int main() {
                 mvaddch(k, deck_tree_w, ACS_VLINE);
             }
 
+            wborder(controls.get_native_window(), 0, 0, 0, 0, 0, 0, 0, 0);
+            mvwin(controls.get_native_window(), (flash_card_w - control_w) / 2,
+                                               deck_tree_w +  (flash_card_w - control_w) / 2);
+
             refresh();
             wrefresh(deck_tree.get_native_window());
+            wrefresh(controls.get_native_window());
             c = deck_tree.read_char();
         }
 
@@ -226,10 +247,12 @@ int main() {
         switch(c) {
             case '1':
                 deck_window = true;
+                clear();
                 search_window.clear();
                 break;
             case '2':
                 deck_window = false;
+                controls.clear();
                 deck_tree.clear();
                 break;
             case 'q':
