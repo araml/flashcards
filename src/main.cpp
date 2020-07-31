@@ -15,9 +15,15 @@
 
 namespace fs = std::filesystem;
 
+struct word {
+    std::string untranslated;
+    std::string translated;
+    /* TODO: maybe extende later for conjugations etc?*/
+};
+
 struct deck {
     std::string name;
-    std::vector<std::string> words;
+    std::vector<word> words;
 };
 
 struct language {
@@ -78,14 +84,6 @@ std::vector<std::string> list_dir(const fs::path &p) {
                 return fs::is_directory(s) || s.ends_with(".csv");
             });
 
-    // We filter out all the hidden files.
-    pstr.erase(std::remove_if(pstr.begin(), pstr.end(),
-                [] (const string &s) {
-                    if (s.size() && s[0] == '.')
-                        return true;
-                    return false;
-                }), pstr.end());
-
     pstr.insert(pstr.begin(), "../");
     return pstr;
 }
@@ -122,22 +120,41 @@ public:
         va_end(args);
     }
 
+    void cwrite(int x, int y, std::string line, unsigned int attr = 0) {
+        set_attr(attr);
+        std::string l(" ");
+        l += line + std::string((size_t)width - line.size(), ' ');
+        mvwprintw(w, x, y, l.c_str());
+        unset_attr(attr);
+    }
+
     int read_char() {
         return wgetch(w);
     }
 
-    void set_attr(int attr) {
+    void set_attr(unsigned int attr) {
         wattron(w, attr);
     }
 
-    void unset_attr(int attr) {
+    void unset_attr(unsigned int attr) {
         wattroff(w, attr);
     }
+
+    WINDOW *get_native_window() { return w; }
 
 private:
     WINDOW *w;
     int width, height;
 };
+
+
+deck load_deck(const std::string &path) {
+    deck d;
+    d.name = path;
+    std::vector<std::vector<std::string>> words = open_csv(path);
+    d.words = map<word>(words, [](auto v) { return word{v[0], v[1]}; });
+    return d;
+}
 
 int main() {
     struct winsize max;
@@ -154,10 +171,15 @@ int main() {
     use_default_colors();
     init_pair(1, COLOR_WHITE, COLOR_BLUE);
     keypad(stdscr, true);
-    #define REVERSE_COLOR 1
+    //#define REVERSE_COLOR 1
+
+    unsigned int reverse_color = COLOR_PAIR(1);
 
     window search_window = window(width, height);
-    window deck_w = window(width, height);
+    int deck_tree_w = width / 3;
+    int flash_card_w = width - deck_tree_w - 1;
+    window deck_tree = window(deck_tree_w, height);
+    window flash_card = window(flash_card_w, height);
 
     size_t selected = 0;
 
@@ -168,27 +190,36 @@ int main() {
     bool deck_window = true;
     bool quit = false;
     int c;
+    deck d;
     while (!quit) {
-        size_t i = 0;
-
+        size_t i = 1;
+        search_window.cwrite(0, 0, "Browser", reverse_color | A_BOLD);
+        wbkgdset(search_window.get_native_window(), 0);
         if (!deck_window) {
             for (auto &w : paths) {
-                if (i == selected) {
-                    search_window.set_attr(COLOR_PAIR(REVERSE_COLOR));
-                }
-
-                search_window.write(i, 0, w.c_str());
-
-                if (i == selected) {
-                    search_window.unset_attr(COLOR_PAIR(REVERSE_COLOR));
-                }
+                if (i - 1 == selected)
+                    search_window.cwrite(i, 0, w.c_str(), reverse_color | A_BOLD);
+                else
+                    search_window.cwrite(i, 0, w.c_str());
 
                 i++;
             }
             c = search_window.read_char();
         } else {
-            deck_w.write(i, 0, "Decks");
-            c = deck_w.read_char();
+            deck_tree.write(0, 0, d.name.c_str());
+            size_t k = 1;
+            for (auto w : d.words) {
+                deck_tree.write(k, 0, std::string(w.untranslated + " " + w.translated).c_str());
+                k++;
+            }
+
+            for (int k = 1; k < height; k++) {
+                mvaddch(k, deck_tree_w, ACS_VLINE);
+            }
+
+            refresh();
+            wrefresh(deck_tree.get_native_window());
+            c = deck_tree.read_char();
         }
 
 
@@ -196,11 +227,10 @@ int main() {
             case '1':
                 deck_window = true;
                 search_window.clear();
-
                 break;
             case '2':
                 deck_window = false;
-                deck_w.clear();
+                deck_tree.clear();
                 break;
             case 'q':
                 quit = true;
@@ -214,10 +244,14 @@ int main() {
                     selected--;
                 break;
             case 10:
-                chdir(paths[selected].c_str());
-                paths = list_dir(".");
-                selected = 0;
-                i = 0;
+                if (fs::is_directory(paths[selected])) {
+                    chdir(paths[selected].c_str());
+                    paths = list_dir(".");
+                    selected = 0;
+                    i = 0;
+                } else {
+                    d = load_deck(paths[selected]);
+                }
                 search_window.clear();
                 break;
         }
@@ -286,4 +320,5 @@ open_db(db);
     insert_into(db, "deck_word", "word_idx", word_idx, "deck_idx", deck_idx);
 
     close_db(db);
-    */
+
+*/
