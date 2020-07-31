@@ -123,7 +123,7 @@ public:
     void cwrite(int x, int y, std::string line, unsigned int attr = 0) {
         set_attr(attr);
         std::string l(" ");
-        l += line + std::string((size_t)width - line.size(), ' ');
+        l += line + std::string((size_t)width - line.size() - 1, ' ');
         mvwprintw(w, x, y, l.c_str());
         unset_attr(attr);
     }
@@ -190,9 +190,10 @@ int main() {
     int flash_card_w = width - deck_tree_w - 1;
     window deck_tree = window(deck_tree_w, height);
     window flash_card = window(flash_card_w, height);
-    int control_w = flash_card_w / 2;
-    window controls = window(control_w, flash_card_w / 5);
+    int control_w = flash_card_w / 4;
+    window controls = window(control_w, flash_card_w / 9);
 
+    nodelay(stdscr, true);
     size_t selected = 0;
 
     //attron(COLOR_PAIR(0));
@@ -234,13 +235,17 @@ int main() {
             }
 
             wborder(controls.get_native_window(), 0, 0, 0, 0, 0, 0, 0, 0);
-            mvwin(controls.get_native_window(), (flash_card_w - control_w) / 2,
-                                               deck_tree_w +  (flash_card_w - control_w) / 2);
+            std::string cfg = "[configuration]";
+            int position = ((size_t)control_w - cfg.size()) / 2;
+            controls.write(0, position, cfg.c_str());
+            mvprintw(30, 30, "%d", (flash_card_w - control_w) / 2);
+            mvwin(controls.get_native_window(), (height - flash_card_w / 9) / 2,
+                                                deck_tree_w + (flash_card_w - control_w) / 2);
 
             refresh();
             wrefresh(deck_tree.get_native_window());
             wrefresh(controls.get_native_window());
-            c = deck_tree.read_char();
+            c = getch(); // deck_tree.read_char();
         }
 
 
