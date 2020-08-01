@@ -4,7 +4,6 @@
 #include <unordered_map>
 #include <vector>
 #include <string>
-#include <algorithm>
 #include <filesystem>
 #include <unistd.h>
 
@@ -12,6 +11,7 @@
 #include <signal.h>
 
 #include <csv.h>
+#include <utils.h>
 
 namespace fs = std::filesystem;
 
@@ -43,47 +43,6 @@ void sig_winch([[gnu::unused]] int irq) {
 }
 
 int height, width;
-
-template <typename T, typename Predicate>
-std::vector<T> filter(const std::vector<T> &v, Predicate p) {
-    std::vector<T> filtered;
-    std::copy_if(v.begin(), v.end(), std::back_inserter(filtered), p);
-    return filtered;
-}
-
-template <typename R, typename T, typename Predicate>
-std::vector<R> map(const std::vector<T> &v, Predicate p) {
-    std::vector<R> mapd(v.size());
-    std::transform(v.begin(), v.end(), mapd.begin(), p);
-    return mapd;
-}
-
-std::vector<std::string> list_dir(const fs::path &p) {
-    fs::directory_iterator it = fs::directory_iterator(p);
-
-    // Sort by directories first and common files later
-    std::vector<fs::path> paths(begin(it), end(it));
-    std::sort(paths.begin(), paths.end(), [](const fs::path &p1,
-                                             const fs::path &p2) {
-                return (fs::is_directory(p1) && fs::is_directory(p2) &&
-                    (p1 < p2)) || (fs::is_directory(p1) && !fs::is_directory(p2));
-            });
-
-    // Agregamos el "/"
-    std::vector<std::string> pstr = map<std::string>(paths,
-            [] (const fs::path &p1) {
-                return fs::is_directory(p1) ? p1.filename().string() + "/"
-                : p1.filename().string();
-            });
-
-    pstr = filter(pstr,
-            [] (const string &s) {
-                return fs::is_directory(s) || s.ends_with(".csv");
-            });
-
-    pstr.insert(pstr.begin(), "../");
-    return pstr;
-}
 
 class window {
 public:
@@ -207,7 +166,6 @@ int main() {
     int deck_tree_w = width / 3;
     int flash_card_w = width - deck_tree_w - 1;
     window deck_tree = window(deck_tree_w, height);
-    window flash_card = window(flash_card_w, height);
     int control_w = flash_card_w / 4;
     window controls = window(control_w, flash_card_w / 9);
 
