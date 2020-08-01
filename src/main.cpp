@@ -32,10 +32,7 @@ struct language {
     std::unordered_map<std::string, deck> decks;
 };
 
-struct root {
-    std::vector<std::string> lang_names;
-    std::unordered_map<std::string, language> languages;
-};
+std::vector<language> languages;
 
 bool cmp_str(const std::string &s1, const std::string &s2) {
     return s1 == s2;
@@ -148,12 +145,9 @@ private:
 };
 
 
-deck load_deck(const std::string &path) {
-    deck d;
-    d.name = path;
+std::vector<word> load_deck(const std::string &path) {
     std::vector<std::vector<std::string>> words = open_csv(path);
-    d.words = map<word>(words, [](auto v) { return word{v[0], v[1]}; });
-    return d;
+    return map<word>(words, [](auto v) { return word{v[0], v[1]}; });
 }
 
 std::vector<std::string> control_str {
@@ -165,6 +159,26 @@ std::vector<std::string> control_str {
     "Delete  : Shift + D",
     "Quit    : Esc / q",
 };
+
+/* For now asume /Language/Deck/Single .csv file
+ * TODO: maybe merge many csv files?
+ * TODO: if more than one subfolder explore all.
+ * TODO: if only one folder and then csvs asks for the language
+ * TODO: if .csv only ask for language + deck.
+ */
+void add_folder_or_file(const std::string &path) {
+    language l;
+    l.name = path;
+    chdir(path.c_str());
+    auto dir = list_dir(fs::current_path());
+    deck d;
+    d.name = dir[1];
+    chdir(d.name.c_str());
+    dir = list_dir(fs::current_path());
+    d.words = load_deck(dir[1]);
+    l.decks.insert({d.name, d});
+    languages.push_back(l);
+}
 
 int main() {
     struct winsize max;
@@ -229,9 +243,11 @@ int main() {
         } else {
             deck_tree.cwrite(0, 0, "Decks", reverse_color | A_BOLD);
             size_t k = 1;
-            for (auto w : d.words) {
-                deck_tree.write(k, 0, std::string(w.untranslated + " " + w.translated).c_str());
-                k++;
+            for (auto &l : languages) {
+                deck_tree.cwrite(k++, 0, l.name);
+                for (auto [deck_name, deck] : l.decks) {
+                    deck_tree.cwrite(k++, 0, deck_name);
+                }
             }
 
             mvaddch(0, deck_tree_w, blue_thick | ACS_VLINE);
@@ -272,6 +288,9 @@ int main() {
             case 'q':
                 quit = true;
                 break;
+            case 'a':
+                add_folder_or_file(paths[selected]);
+                break;
             case KEY_DOWN:
                 if (selected + 1 < paths.size())
                     selected++;
@@ -287,7 +306,7 @@ int main() {
                     selected = 0;
                     i = 0;
                 } else {
-                    d = load_deck(paths[selected]);
+                    //d = load_deck(paths[selected]);
                 }
                 search_window.clear();
                 break;
