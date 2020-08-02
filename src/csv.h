@@ -8,7 +8,7 @@
 #include <sstream>
 // Placeholder CSV parser
 
-std::vector<std::string> split_string(std::string line) {
+inline std::vector<std::string> split_string(std::string line) {
     std::stringstream ss(line);
     std::string word;
     std::vector<std::string> words;
@@ -19,7 +19,7 @@ std::vector<std::string> split_string(std::string line) {
     return words;
 }
 
-std::vector<std::vector<std::string>> open_csv(std::string path) {
+inline std::vector<std::vector<std::string>> open_csv(std::string path) {
     std::ifstream fp(path);
     std::vector<std::vector<std::string>> parsed_csv;
     std::string line;

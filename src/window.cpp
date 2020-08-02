@@ -2,6 +2,9 @@
 #include <ncurses.h>
 #include <vector>
 #include <string>
+#include <utils.h>
+#include <unistd.h>
+#include <csv.h>
 
 extern unsigned int reverse_color;
 
@@ -21,14 +24,78 @@ void cwrite(int x, int y, int width, const std::string &line, unsigned int attr)
     attroff(attr);
 }
 
-void update_filesystem_browser(size_t selected, int width,
-                               const std::vector<std::string> &paths) {
+auto paths = list_dir(fs::current_path());
+size_t fs_selected = 0;
+extern std::vector<language> languages;
+
+static std::vector<word> load_deck(const std::string &path) {
+    std::vector<std::vector<std::string>> words = open_csv(path);
+    return map<word>(words, [](auto v) { return word{v[0], v[1]}; });
+}
+
+/* For now asume /Language/Deck/Single .csv file
+ * TODO: maybe merge many csv files?
+ * TODO: if more than one subfolder explore all.
+ * TODO: if only one folder and then csvs asks for the language
+ * TODO: if .csv only ask for language + deck.
+ */
+static void add_folder_or_file(const std::string &path) {
+    language l;
+    l.name = path;
+    chdir(path.c_str());
+    auto dir = list_dir(fs::current_path());
+    deck d;
+    d.name = dir[1];
+    chdir(d.name.c_str());
+    dir = list_dir(fs::current_path());
+    d.words = load_deck(dir[1]);
+    l.decks.insert({d.name, d});
+    languages.push_back(l);
+}
+
+STATE update_filesystem_browser(int c, int width) {
+    clear();
+    print_filesystem_browser(width);
+
+    switch(c) {
+        case '1':
+            return STATE::DECK;
+        case '2':
+            break;
+        case 'q':
+            return STATE::QUIT;
+        case 'a':
+            add_folder_or_file(paths[fs_selected]);
+            break;
+        case KEY_DOWN:
+            if (fs_selected + 1 < paths.size())
+                fs_selected++;
+            break;
+        case KEY_UP:
+            if (fs_selected > 0)
+                fs_selected--;
+            break;
+        case 10:
+            if (fs::is_directory(paths[fs_selected])) {
+                chdir(paths[fs_selected].c_str());
+                paths = list_dir(".");
+                fs_selected = 0;
+                clear();
+            } else {
+                //d = load_deck(paths[selected]);
+            }
+            break;
+    }
+    return STATE::FILE_BROWSER;
+}
+
+void print_filesystem_browser(int width) {
     size_t i = 1;
     cwrite(0, 0, width, "Browser", reverse_color | A_BOLD);
     wbkgdset(stdscr, 0);
 
     for (auto &word : paths) {
-        if (i - 1 == selected)
+        if (i - 1 == fs_selected)
             cwrite(i, 0, width, word.c_str(), reverse_color | A_BOLD);
         else
             cwrite(i, 0, width, word.c_str());
@@ -39,7 +106,28 @@ void update_filesystem_browser(size_t selected, int width,
     refresh();
 }
 
-void update_deck_browser(int width, int height, std::vector<language> &languages) {
+STATE update_deck_browser(int c, int width, int height) {
+    clear();
+    print_deck_browser(width, height);
+
+    switch(c) {
+        case '1':
+            break;
+        case '2':
+            return STATE::FILE_BROWSER;
+        case 'q':
+            return STATE::QUIT;
+        case KEY_DOWN:
+            break;
+        case KEY_UP:
+            break;
+        case 10:
+            break;
+    }
+    return STATE::DECK;
+}
+
+void print_deck_browser(int width, int height) {
     unsigned int blue_thin = COLOR_PAIR(2);
     unsigned int blue_thick = COLOR_PAIR(3);
     cwrite(0, 0, width, "Decks", reverse_color | A_BOLD);

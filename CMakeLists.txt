@@ -25,7 +25,11 @@ include_directories(${sqlite})
 include_directories(src)
 #include_directories(ncurses_mock)
 
-add_executable(flashcard_px src/main.cpp src/sql.cpp src/window.cpp)
+add_executable(flashcard_px
+               src/main.cpp
+               src/sql.cpp
+               src/window.cpp
+               src/utils.cpp)
 #set_source_files_properties(ncurses_mock/ncurses.c PROPERTIES LANGUAGE CXX )
 
 target_link_libraries(flashcard_px "pthread" "ncursesw" "dl" "GL" "GLU" "rt")

@@ -3,18 +3,20 @@
 #include <sql.h>
 #include <string>
 #include <filesystem>
+#include <chrono>
+#include <thread>
+
 #include <unistd.h>
 
 #include <sys/ioctl.h>
 #include <signal.h>
+
 
 #include <window.h>
 #include <csv.h>
 #include <utils.h>
 
 namespace fs = std::filesystem;
-
-
 
 std::vector<language> languages;
 
@@ -28,35 +30,10 @@ void sig_winch([[gnu::unused]] int irq) {
 
 int height, width;
 
-std::vector<word> load_deck(const std::string &path) {
-    std::vector<std::vector<std::string>> words = open_csv(path);
-    return map<word>(words, [](auto v) { return word{v[0], v[1]}; });
-}
 
 
-    unsigned int reverse_color = COLOR_PAIR(1);
 
-
-/* For now asume /Language/Deck/Single .csv file
- * TODO: maybe merge many csv files?
- * TODO: if more than one subfolder explore all.
- * TODO: if only one folder and then csvs asks for the language
- * TODO: if .csv only ask for language + deck.
- */
-void add_folder_or_file(const std::string &path) {
-    language l;
-    l.name = path;
-    chdir(path.c_str());
-    auto dir = list_dir(fs::current_path());
-    deck d;
-    d.name = dir[1];
-    chdir(d.name.c_str());
-    dir = list_dir(fs::current_path());
-    d.words = load_deck(dir[1]);
-    l.decks.insert({d.name, d});
-    languages.push_back(l);
-}
-
+unsigned int reverse_color = COLOR_PAIR(1);
 
 
 int main() {
@@ -79,67 +56,35 @@ int main() {
     //#define REVERSE_COLOR 1
 
     int deck_tree_w = width / 3;
-    int flash_card_w = width - deck_tree_w - 1;
-    int config_w = flash_card_w / 4;
+    //int flash_card_w = width - deck_tree_w - 1;
+    //int config_w = flash_card_w / 4;
 
     nodelay(stdscr, true);
 
 
     //attron(COLOR_PAIR(0));
 
-    auto paths = list_dir(fs::current_path());
-    size_t selected = 0;
-
-    bool deck_window = true;
     bool quit = false;
-    int c;
+    int c = 0;
     deck d;
+
+    STATE state = STATE::DECK;
+
     while (!quit) {
-        if (!deck_window) {
-            update_filesystem_browser(selected, width, paths);
+        c = getch();
+        if (state == STATE::FILE_BROWSER) {
+            state = update_filesystem_browser(c, width);
+        } else if (state == STATE::DECK) {
+            state = update_deck_browser(c, deck_tree_w, height);
+        } else if (state == STATE::QUIT) {
+            break;
         } else {
-            update_deck_browser(deck_tree_w, height, languages);
-            update_config(deck_tree_w, config_w, width, height);
 
-            refresh();
         }
 
-        c = getch(); // deck_tree.read_char();
+        std::this_thread::sleep_for(std::chrono::milliseconds{5});
+        refresh();
 
-        switch(c) {
-            case '1':
-                deck_window = true;
-                clear();
-                break;
-            case '2':
-                deck_window = false;
-                clear();
-                break;
-            case 'q':
-                quit = true;
-                break;
-            case 'a':
-                add_folder_or_file(paths[selected]);
-                break;
-            case KEY_DOWN:
-                if (selected + 1 < paths.size())
-                    selected++;
-                break;
-            case KEY_UP:
-                if (selected > 0)
-                    selected--;
-                break;
-            case 10:
-                if (fs::is_directory(paths[selected])) {
-                    chdir(paths[selected].c_str());
-                    paths = list_dir(".");
-                    selected = 0;
-                    clear();
-                } else {
-                    //d = load_deck(paths[selected]);
-                }
-                break;
-        }
     }
 
     endwin();
