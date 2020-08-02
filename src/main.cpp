@@ -1,8 +1,6 @@
 #include <iostream>
 #include <ncurses.h>
 #include <sql.h>
-#include <unordered_map>
-#include <vector>
 #include <string>
 #include <filesystem>
 #include <unistd.h>
@@ -10,27 +8,13 @@
 #include <sys/ioctl.h>
 #include <signal.h>
 
+#include <window.h>
 #include <csv.h>
 #include <utils.h>
 
 namespace fs = std::filesystem;
 
-struct word {
-    std::string untranslated;
-    std::string translated;
-    /* TODO: maybe extende later for conjugations etc?*/
-};
 
-struct deck {
-    std::string name;
-    std::vector<word> words;
-};
-
-struct language {
-    std::string name;
-    std::vector<std::string> deck_names;
-    std::unordered_map<std::string, deck> decks;
-};
 
 std::vector<language> languages;
 
@@ -43,66 +27,6 @@ void sig_winch([[gnu::unused]] int irq) {
 }
 
 int height, width;
-
-class window {
-public:
-    window(int width, int height)
-        : width(width),
-          height(height)
-    {
-        w = newwin(height, width, 0, 0);
-        keypad(w, true);
-    }
-
-    ~window() {
-        delwin(w);
-    }
-
-    void resize(int, int) { }
-
-    void clear() {
-        wclear(w);
-    }
-
-    void refresh() {
-        wrefresh(w);
-    }
-
-    void write(int x, int y, const char *fmt, ...) {
-        wmove(w, x, y);
-        va_list args;
-        va_start(args, fmt);
-        vw_printw(w, fmt, args);
-        va_end(args);
-    }
-
-    void cwrite(int x, int y, std::string line, unsigned int attr = 0) {
-        set_attr(attr);
-        std::string l(" ");
-        l += line + std::string((size_t)width - line.size() - 1, ' ');
-        mvwprintw(w, x, y, l.c_str());
-        unset_attr(attr);
-    }
-
-    int read_char() {
-        return wgetch(w);
-    }
-
-    void set_attr(unsigned int attr) {
-        wattron(w, attr);
-    }
-
-    void unset_attr(unsigned int attr) {
-        wattroff(w, attr);
-    }
-
-    WINDOW *get_native_window() { return w; }
-
-private:
-    WINDOW *w;
-    int width, height;
-};
-
 
 std::vector<word> load_deck(const std::string &path) {
     std::vector<std::vector<std::string>> words = open_csv(path);
@@ -139,6 +63,10 @@ void add_folder_or_file(const std::string &path) {
     languages.push_back(l);
 }
 
+unsigned int reverse_color = COLOR_PAIR(1);
+unsigned int blue_thin = COLOR_PAIR(2);
+unsigned int blue_thick = COLOR_PAIR(3);
+
 int main() {
     struct winsize max;
     ioctl(1, TIOCGWINSZ, &max);
@@ -158,90 +86,58 @@ int main() {
     keypad(stdscr, true);
     //#define REVERSE_COLOR 1
 
-    unsigned int reverse_color = COLOR_PAIR(1);
-    unsigned int blue_thin = COLOR_PAIR(2);
-    unsigned int blue_thick = COLOR_PAIR(3);
-
-    window search_window = window(width, height);
     int deck_tree_w = width / 3;
     int flash_card_w = width - deck_tree_w - 1;
-    window deck_tree = window(deck_tree_w, height);
     int control_w = flash_card_w / 4;
-    window controls = window(control_w, flash_card_w / 9);
 
     nodelay(stdscr, true);
-    size_t selected = 0;
+
 
     //attron(COLOR_PAIR(0));
 
     auto paths = list_dir(fs::current_path());
+    size_t selected = 0;
 
     bool deck_window = true;
     bool quit = false;
     int c;
     deck d;
     while (!quit) {
-        size_t i = 1;
         if (!deck_window) {
-            search_window.cwrite(0, 0, "Browser", reverse_color | A_BOLD);
-            wbkgdset(search_window.get_native_window(), 0);
-            for (auto &w : paths) {
-                if (i - 1 == selected)
-                    search_window.cwrite(i, 0, w.c_str(), reverse_color | A_BOLD);
-                else
-                    search_window.cwrite(i, 0, w.c_str());
-
-                i++;
-            }
-
-
-            refresh();
-            wrefresh(search_window.get_native_window());
-            c = getch(); //search_window.read_char();
+            update_filesystem_browser(selected, width, paths);
         } else {
-            deck_tree.cwrite(0, 0, "Decks", reverse_color | A_BOLD);
-            size_t k = 1;
-            for (auto &l : languages) {
-                deck_tree.cwrite(k++, 0, l.name);
-                for (auto [deck_name, deck] : l.decks) {
-                    deck_tree.cwrite(k++, 0, deck_name);
-                }
-            }
+            update_deck_browser(deck_tree_w, languages);
 
             mvaddch(0, deck_tree_w, blue_thick | ACS_VLINE);
             for (int k = 1; k < height; k++) {
                 mvaddch(k, deck_tree_w, blue_thin | ACS_VLINE);
             }
 
-            wborder(controls.get_native_window(), 0, 0, 0, 0, 0, 0, 0, 0);
+            // TODO: wborder without target window
+            //wborder(controls.get_native_window(), 0, 0, 0, 0, 0, 0, 0, 0);
             std::string cfg = "[Controls]";
             int position = ((size_t)control_w - cfg.size()) / 2;
-            controls.write(0, position, cfg.c_str());
-            mvprintw(30, 30, "%d", (flash_card_w - control_w) / 2);
-            mvwin(controls.get_native_window(), (height - flash_card_w / 9) / 2,
-                                                deck_tree_w + (flash_card_w - control_w) / 2);
+            int y_window = (height - flash_card_w / 9) / 2;
+            int x_window =  deck_tree_w + (flash_card_w - control_w) / 2;
+            cwrite(y_window, x_window + position, control_w, cfg);
+
 
             for (size_t i = 0; i < control_str.size(); i++) {
-                controls.write(i + 1, 3, control_str[i].c_str());
+                cwrite(y_window + (int)i + 1, x_window + 3, control_w, control_str[i].c_str());
             }
 
             refresh();
-            wrefresh(deck_tree.get_native_window());
-            wrefresh(controls.get_native_window());
-            c = getch(); // deck_tree.read_char();
         }
 
+        c = getch(); // deck_tree.read_char();
 
         switch(c) {
             case '1':
                 deck_window = true;
                 clear();
-                search_window.clear();
                 break;
             case '2':
                 deck_window = false;
-                controls.clear();
-                deck_tree.clear();
                 break;
             case 'q':
                 quit = true;
@@ -262,11 +158,9 @@ int main() {
                     chdir(paths[selected].c_str());
                     paths = list_dir(".");
                     selected = 0;
-                    i = 0;
                 } else {
                     //d = load_deck(paths[selected]);
                 }
-                search_window.clear();
                 break;
         }
     }
