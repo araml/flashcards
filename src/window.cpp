@@ -53,12 +53,16 @@ static void add_folder_or_file(const std::string &path) {
     languages.push_back(l);
 }
 
+bool update = true;
+
 STATE update_filesystem_browser(int c, int width) {
-    clear();
-    print_filesystem_browser(width);
+    if (update) {
+        print_filesystem_browser(width);
+    }
 
     switch(c) {
         case '1':
+            update = true;
             return STATE::DECK;
         case '2':
             break;
@@ -70,26 +74,33 @@ STATE update_filesystem_browser(int c, int width) {
         case KEY_DOWN:
             if (fs_selected + 1 < paths.size())
                 fs_selected++;
+            update = true;
             break;
         case KEY_UP:
             if (fs_selected > 0)
                 fs_selected--;
+            update = true;
             break;
         case 10:
             if (fs::is_directory(paths[fs_selected])) {
                 chdir(paths[fs_selected].c_str());
                 paths = list_dir(".");
                 fs_selected = 0;
-                clear();
+                update = true;
             } else {
                 //d = load_deck(paths[selected]);
             }
             break;
+        default:
+            update = false;
     }
+
     return STATE::FILE_BROWSER;
 }
 
 void print_filesystem_browser(int width) {
+    clear();
+
     size_t i = 1;
     cwrite(0, 0, width, "Browser", reverse_color | A_BOLD);
     wbkgdset(stdscr, 0);
@@ -107,13 +118,14 @@ void print_filesystem_browser(int width) {
 }
 
 STATE update_deck_browser(int c, int width, int height) {
-    clear();
-    print_deck_browser(width, height);
+    if (update)
+        print_deck_browser(width, height);
 
     switch(c) {
         case '1':
             break;
         case '2':
+            update = true;
             return STATE::FILE_BROWSER;
         case 'q':
             return STATE::QUIT;
@@ -123,11 +135,16 @@ STATE update_deck_browser(int c, int width, int height) {
             break;
         case 10:
             break;
+        default:
+            update = false;
     }
+
     return STATE::DECK;
 }
 
 void print_deck_browser(int width, int height) {
+    clear();
+
     unsigned int blue_thin = COLOR_PAIR(2);
     unsigned int blue_thick = COLOR_PAIR(3);
     cwrite(0, 0, width, "Decks", reverse_color | A_BOLD);
@@ -143,6 +160,8 @@ void print_deck_browser(int width, int height) {
     for (int k = 1; k < height; k++) {
         mvaddch(k, width, blue_thin | ACS_VLINE);
     }
+
+    refresh();
 }
 
 std::vector<std::string> config_list {

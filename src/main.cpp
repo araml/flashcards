@@ -82,9 +82,8 @@ int main() {
 
         }
 
-        std::this_thread::sleep_for(std::chrono::milliseconds{5});
         refresh();
-
+        std::this_thread::sleep_for(std::chrono::milliseconds{25});
     }
 
     endwin();
