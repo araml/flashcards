@@ -33,15 +33,9 @@ std::vector<word> load_deck(const std::string &path) {
     return map<word>(words, [](auto v) { return word{v[0], v[1]}; });
 }
 
-std::vector<std::string> control_str {
-    "Decks   : 1",
-    "Browser : 2",
-    "Config  : 3",
-    "Add     : A",
-    "Select  : Enter",
-    "Delete  : Shift + D",
-    "Quit    : Esc / q",
-};
+
+    unsigned int reverse_color = COLOR_PAIR(1);
+
 
 /* For now asume /Language/Deck/Single .csv file
  * TODO: maybe merge many csv files?
@@ -63,9 +57,7 @@ void add_folder_or_file(const std::string &path) {
     languages.push_back(l);
 }
 
-unsigned int reverse_color = COLOR_PAIR(1);
-unsigned int blue_thin = COLOR_PAIR(2);
-unsigned int blue_thick = COLOR_PAIR(3);
+
 
 int main() {
     struct winsize max;
@@ -88,7 +80,7 @@ int main() {
 
     int deck_tree_w = width / 3;
     int flash_card_w = width - deck_tree_w - 1;
-    int control_w = flash_card_w / 4;
+    int config_w = flash_card_w / 4;
 
     nodelay(stdscr, true);
 
@@ -106,25 +98,8 @@ int main() {
         if (!deck_window) {
             update_filesystem_browser(selected, width, paths);
         } else {
-            update_deck_browser(deck_tree_w, languages);
-
-            mvaddch(0, deck_tree_w, blue_thick | ACS_VLINE);
-            for (int k = 1; k < height; k++) {
-                mvaddch(k, deck_tree_w, blue_thin | ACS_VLINE);
-            }
-
-            // TODO: wborder without target window
-            //wborder(controls.get_native_window(), 0, 0, 0, 0, 0, 0, 0, 0);
-            std::string cfg = "[Controls]";
-            int position = ((size_t)control_w - cfg.size()) / 2;
-            int y_window = (height - flash_card_w / 9) / 2;
-            int x_window =  deck_tree_w + (flash_card_w - control_w) / 2;
-            cwrite(y_window, x_window + position, control_w, cfg);
-
-
-            for (size_t i = 0; i < control_str.size(); i++) {
-                cwrite(y_window + (int)i + 1, x_window + 3, control_w, control_str[i].c_str());
-            }
+            update_deck_browser(deck_tree_w, height, languages);
+            update_config(deck_tree_w, config_w, width, height);
 
             refresh();
         }
@@ -138,6 +113,7 @@ int main() {
                 break;
             case '2':
                 deck_window = false;
+                clear();
                 break;
             case 'q':
                 quit = true;
@@ -158,6 +134,7 @@ int main() {
                     chdir(paths[selected].c_str());
                     paths = list_dir(".");
                     selected = 0;
+                    clear();
                 } else {
                     //d = load_deck(paths[selected]);
                 }

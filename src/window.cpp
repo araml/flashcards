@@ -39,7 +39,9 @@ void update_filesystem_browser(size_t selected, int width,
     refresh();
 }
 
-void update_deck_browser(int width, std::vector<language> &languages) {
+void update_deck_browser(int width, int height, std::vector<language> &languages) {
+    unsigned int blue_thin = COLOR_PAIR(2);
+    unsigned int blue_thick = COLOR_PAIR(3);
     cwrite(0, 0, width, "Decks", reverse_color | A_BOLD);
     size_t k = 1;
     for (auto &l : languages) {
@@ -47,5 +49,54 @@ void update_deck_browser(int width, std::vector<language> &languages) {
         for (auto [deck_name, deck] : l.decks) {
             cwrite(k++, 0, width, deck_name);
         }
+    }
+
+    mvaddch(0, width, blue_thick | ACS_VLINE);
+    for (int k = 1; k < height; k++) {
+        mvaddch(k, width, blue_thin | ACS_VLINE);
+    }
+}
+
+std::vector<std::string> config_list {
+    "Decks   : 1",
+    "Browser : 2",
+    "Config  : 3",
+    "Add     : A",
+    "Select  : Enter",
+    "Delete  : Shift + D",
+    "Quit    : Esc / q",
+};
+
+// why isn't this part of ncurses??????
+static void draw_box(int x, int y, int width, int height) {
+    mvhline(y, x + 1, ACS_HLINE, width - 1);
+    mvhline(y + height, x + 1, ACS_HLINE, width - 1);
+    mvaddch(y, x, ACS_ULCORNER);
+    mvaddch(y, x + width, ACS_URCORNER);
+
+    mvvline(y + 1, x, ACS_VLINE, height - 1);
+    mvvline(y + 1, x + width, ACS_VLINE, height - 1);
+    mvaddch(y + height, x, ACS_LLCORNER);
+    mvaddch(y + height, x + width, ACS_LRCORNER);
+}
+
+
+void update_config(int deck_tree_w, int config_w, int screen_width, int screen_height) {
+    // TODO: wborder without target window
+    //wborder(controls.get_native_window(), 0, 0, 0, 0, 0, 0, 0, 0);
+    std::string cfg = "[Controls]";
+
+    int flash_card_w = screen_width - deck_tree_w ;
+    int position = ((size_t)config_w - cfg.size()) / 2;
+    int y_window = (screen_height - flash_card_w / 9) / 2;
+    int x_window =  deck_tree_w  + (flash_card_w - config_w) / 2;
+
+    int cfg_size = (int)config_list.size();
+
+    draw_box(x_window, y_window, config_w + 2, cfg_size + 3);
+
+    write(y_window, x_window + position, cfg.c_str());
+    for (size_t i = 0; i < config_list.size(); i++) {
+        write(y_window + (int)i + 2, x_window + 3, config_list[i].c_str());
     }
 }
