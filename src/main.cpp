@@ -28,19 +28,15 @@ void sig_winch([[gnu::unused]] int irq) {
     return;
 }
 
-int height, width;
-
-
-
+int terminal_height, terminal_width;
 
 unsigned int reverse_color = COLOR_PAIR(1);
-
 
 int main() {
     struct winsize max;
     ioctl(1, TIOCGWINSZ, &max);
-    height = max.ws_row;
-    width = max.ws_col;
+    terminal_height = max.ws_row;
+    terminal_width = max.ws_col;
     setlocale(LC_ALL, "");
     initscr();
     curs_set(0);
@@ -55,8 +51,8 @@ int main() {
     keypad(stdscr, true);
     //#define REVERSE_COLOR 1
 
-    int deck_tree_w = width / 3;
-    //int flash_card_w = width - deck_tree_w - 1;
+    int deck_tree_w = terminal_width / 3;
+    //int flash_card_w = terminal_width - deck_tree_w - 1;
     //int config_w = flash_card_w / 4;
 
     nodelay(stdscr, true);
@@ -73,9 +69,9 @@ int main() {
     while (!quit) {
         c = getch();
         if (state == STATE::FILE_BROWSER) {
-            state = update_filesystem_browser(c, width);
+            state = update_filesystem_browser(c, terminal_width);
         } else if (state == STATE::DECK) {
-            state = update_deck_browser(c, deck_tree_w, height);
+            state = update_deck_browser(c, deck_tree_w, terminal_height);
         } else if (state == STATE::QUIT) {
             break;
         } else {

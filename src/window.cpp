@@ -7,6 +7,32 @@
 #include <csv.h>
 
 extern unsigned int reverse_color;
+extern std::vector<language> languages;
+
+auto paths = list_dir(fs::current_path());
+bool update = true;
+size_t fs_selected = 0;
+size_t deck_selected = 0;
+
+/* The lang/deck browser can be expanded on runtime to hide all the decks
+ * of a single language or hide all the subdecks (TODO) of a deck
+ * For example we may have
+ * Lang
+ *   ~ Deck 1
+ *     ~ Sub deck 1
+ *     ~ Sub deck 2
+ *   ~ Deck 2
+ *
+ * But this could be seen in the interface as
+ *
+ * Lang
+ * or
+ * Lang
+ *  ~ Deck 1
+ *  ~ Deck 2
+ * etc.
+ */
+size_t deck_browser_size = 0;
 
 void write(int x, int y, const char *fmt, ...) {
     wmove(stdscr, x, y);
@@ -23,10 +49,6 @@ void cwrite(int x, int y, int width, const std::string &line, unsigned int attr)
     mvprintw(x, y, l.c_str());
     attroff(attr);
 }
-
-auto paths = list_dir(fs::current_path());
-size_t fs_selected = 0;
-extern std::vector<language> languages;
 
 static std::vector<word> load_deck(const std::string &path) {
     std::vector<std::vector<std::string>> words = open_csv(path);
@@ -52,8 +74,6 @@ static void add_folder_or_file(const std::string &path) {
     l.decks.insert({d.name, d});
     languages.push_back(l);
 }
-
-bool update = true;
 
 STATE update_filesystem_browser(int c, int width) {
     if (update) {
@@ -87,8 +107,6 @@ STATE update_filesystem_browser(int c, int width) {
                 paths = list_dir(".");
                 fs_selected = 0;
                 update = true;
-            } else {
-                //d = load_deck(paths[selected]);
             }
             break;
         default:
@@ -117,29 +135,84 @@ void print_filesystem_browser(int width) {
     refresh();
 }
 
+static void update_deck_browser_size() {
+    size_t sz = 0;
+    for (auto &l : languages) {
+        sz++;
+        for (auto &[name, d] : l.decks) {
+            if (d.expanded)
+                sz++;
+        }
+    }
+
+    deck_browser_size = sz;
+}
+
+static void update_deck_pressed() {
+    size_t sz = 0;
+    for (auto &l : languages) {
+        if (sz == deck_selected) {
+            for (auto &[name, d] : l.decks) {
+                d.expanded = !d.expanded;
+            }
+            break;
+        } else {
+            sz++;
+            for (auto &[name, d] : l.decks) {
+                if (d.expanded)
+                    sz++;
+            }
+        }
+    }
+}
+
 STATE update_deck_browser(int c, int width, int height) {
-    if (update)
+    if (update) {
+        update_deck_browser_size();
         print_deck_browser(width, height);
+        extern int terminal_width, terminal_height;
+        int flash_card_w = terminal_width - width - 1;
+        int config_w = flash_card_w / 4;
+        print_config(width, config_w, terminal_width, terminal_height);
+    }
 
     switch(c) {
         case '1':
             break;
         case '2':
             update = true;
+            fs_selected = 0;
             return STATE::FILE_BROWSER;
         case 'q':
             return STATE::QUIT;
         case KEY_DOWN:
+            if (deck_selected + 1 < deck_browser_size) {
+                deck_selected++;
+            }
+            update = true;
             break;
         case KEY_UP:
+            if (deck_selected > 0) {
+                deck_selected--;
+            }
+            update = true;
             break;
         case 10:
+            update_deck_pressed();
+            update = true;
             break;
         default:
             update = false;
     }
 
     return STATE::DECK;
+}
+
+static unsigned int is_bold(bool is_bold) {
+    if (is_bold)
+        return reverse_color | A_BOLD;
+    else
+        return 0;
 }
 
 void print_deck_browser(int width, int height) {
@@ -150,9 +223,13 @@ void print_deck_browser(int width, int height) {
     cwrite(0, 0, width, "Decks", reverse_color | A_BOLD);
     size_t k = 1;
     for (auto &l : languages) {
-        cwrite(k++, 0, width, l.name);
+        cwrite(k, 0, width, l.name, is_bold(k - 1 == deck_selected));
+        k++;
         for (auto [deck_name, deck] : l.decks) {
-            cwrite(k++, 0, width, deck_name);
+            if (!deck.expanded)
+                continue;
+            cwrite(k, 0, width, "  " + deck_name, is_bold(k - 1 == deck_selected));
+            k++;
         }
     }
 
@@ -188,7 +265,7 @@ static void draw_box(int x, int y, int width, int height) {
 }
 
 
-void update_config(int deck_tree_w, int config_w, int screen_width, int screen_height) {
+void print_config(int deck_tree_w, int config_w, int screen_width, int screen_height) {
     // TODO: wborder without target window
     //wborder(controls.get_native_window(), 0, 0, 0, 0, 0, 0, 0, 0);
     std::string cfg = "[Controls]";
