@@ -55,6 +55,12 @@ static std::vector<word> load_deck(const std::string &path) {
     return map<word>(words, [](auto v) { return word{v[0], v[1]}; });
 }
 
+std::string remove_slash(std::string s) {
+    if (s.size() && s[s.size() - 1] == '/')
+        s.pop_back();
+    return s;
+}
+
 /* For now asume /Language/Deck/Single .csv file
  * TODO: maybe merge many csv files?
  * TODO: if more than one subfolder explore all.
@@ -63,11 +69,11 @@ static std::vector<word> load_deck(const std::string &path) {
  */
 static void add_folder_or_file(const std::string &path) {
     language l;
-    l.name = path;
+    l.name = remove_slash(path);
     chdir(path.c_str());
     auto dir = list_dir(fs::current_path());
     deck d;
-    d.name = dir[1];
+    d.name = remove_slash(dir[1]);
     chdir(d.name.c_str());
     dir = list_dir(fs::current_path());
     d.words = load_deck(dir[1]);
@@ -138,32 +144,33 @@ void print_filesystem_browser(int width) {
 static void update_deck_browser_size() {
     size_t sz = 0;
     for (auto &l : languages) {
-        sz++;
-        for (auto &[name, d] : l.decks) {
-            if (d.expanded)
-                sz++;
-        }
+        sz += 1 + (l.expand_decks ? l.decks.size() : 0);
     }
 
     deck_browser_size = sz;
 }
 
-static void update_deck_pressed() {
+/*
+static void expand_contract_decks(language &l) {
+    for (auto &[name, d] : l.decks) {
+        d.expanded = !d.expanded;
+    }
+}
+*/
+
+static STATE update_deck_pressed() {
     size_t sz = 0;
     for (auto &l : languages) {
         if (sz == deck_selected) {
-            for (auto &[name, d] : l.decks) {
-                d.expanded = !d.expanded;
-            }
-            break;
+            l.expand_decks = !l.expand_decks;
+            update_deck_browser_size();
+            return STATE::DECK;
         } else {
-            sz++;
-            for (auto &[name, d] : l.decks) {
-                if (d.expanded)
-                    sz++;
-            }
+            sz += 1 + (l.expand_decks ? l.decks.size() : 0);
         }
     }
+
+    return STATE::DECK;
 }
 
 STATE update_deck_browser(int c, int width, int height) {
@@ -198,7 +205,9 @@ STATE update_deck_browser(int c, int width, int height) {
             update = true;
             break;
         case 10:
-            update_deck_pressed();
+            if (auto state = update_deck_pressed(); state != STATE::DECK) {
+                return state;
+            }
             update = true;
             break;
         default:
@@ -221,15 +230,18 @@ void print_deck_browser(int width, int height) {
     unsigned int blue_thin = COLOR_PAIR(2);
     unsigned int blue_thick = COLOR_PAIR(3);
     cwrite(0, 0, width, "Decks", reverse_color | A_BOLD);
+    extern int terminal_width;
+    cwrite(0, width + 1, terminal_width - width - 1, "Flashcards",
+           reverse_color | A_BOLD);
     size_t k = 1;
     for (auto &l : languages) {
         cwrite(k, 0, width, l.name, is_bold(k - 1 == deck_selected));
         k++;
-        for (auto [deck_name, deck] : l.decks) {
-            if (!deck.expanded)
-                continue;
-            cwrite(k, 0, width, "  " + deck_name, is_bold(k - 1 == deck_selected));
-            k++;
+        if (l.expand_decks) {
+            for (auto [deck_name, deck] : l.decks) {
+                cwrite(k, 0, width, "  " + deck_name, is_bold(k - 1 == deck_selected));
+                k++;
+            }
         }
     }
 

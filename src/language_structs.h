@@ -19,6 +19,7 @@ struct deck {
 
 struct language {
     std::string name;
+    bool expand_decks{false};
     std::vector<std::string> deck_names;
     std::unordered_map<std::string, deck> decks;
 };
