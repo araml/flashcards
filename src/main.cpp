@@ -18,25 +18,27 @@
 
 namespace fs = std::filesystem;
 
+bool window_size_changed = false;
 std::vector<language> languages;
-
-bool cmp_str(const std::string &s1, const std::string &s2) {
-    return s1 == s2;
-}
+int terminal_height, terminal_width;
 
 void sig_winch([[gnu::unused]] int irq) {
-    return;
+    window_size_changed = true;
 }
 
-int terminal_height, terminal_width;
+void update_term_size() {
+    struct winsize size;
+    ioctl(1, TIOCGWINSZ, &size);
+    resizeterm(size.ws_row, size.ws_col);
+    terminal_height = size.ws_row;
+    terminal_width = size.ws_col;
+}
+
 
 unsigned int reverse_color = COLOR_PAIR(1);
 
 int main() {
-    struct winsize max;
-    ioctl(1, TIOCGWINSZ, &max);
-    terminal_height = max.ws_row;
-    terminal_width = max.ws_col;
+    update_term_size();
     setlocale(LC_ALL, "");
     initscr();
     curs_set(0);
@@ -51,7 +53,6 @@ int main() {
     keypad(stdscr, true);
     //#define REVERSE_COLOR 1
 
-    int deck_tree_w = terminal_width / 3;
     //int flash_card_w = terminal_width - deck_tree_w - 1;
     //int config_w = flash_card_w / 4;
 
@@ -67,11 +68,18 @@ int main() {
     STATE state = STATE::DECK;
 
     while (!quit) {
+        if (window_size_changed) {
+            window_size_changed = false;
+            update_term_size();
+            extern bool update;
+            update = true;
+        }
+
         c = getch();
         if (state == STATE::FILE_BROWSER) {
             state = update_filesystem_browser(c, terminal_width);
         } else if (state == STATE::DECK) {
-            state = update_deck_browser(c, deck_tree_w, terminal_height);
+            state = update_deck_browser(c, terminal_width / 3, terminal_height);
         } else if (state == STATE::QUIT) {
             break;
         } else {
@@ -86,6 +94,9 @@ int main() {
 }
 
 /*
+ *bool cmp_str(const std::string &s1, const std::string &s2) {
+    return s1 == s2;
+}
 
     auto www = open_csv("rs.csv");
     for (auto ww : www) {
