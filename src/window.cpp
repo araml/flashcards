@@ -1,14 +1,19 @@
-#include <window.h>
 #include <ncurses.h>
-#include <vector>
 #include <string>
 #include <utils.h>
 #include <unistd.h>
+#include <vector>
+
 #include <csv.h>
+#include <language_structs.h>
+#include <window.h>
+
 
 extern unsigned int reverse_color;
 extern std::vector<language> languages;
 
+
+deck current_deck;
 auto paths = list_dir(fs::current_path());
 bool update = true;
 size_t fs_selected = 0;
@@ -35,7 +40,7 @@ size_t deck_selected = 0;
 size_t deck_browser_size = 0;
 
 void write(int x, int y, const char *fmt, ...) {
-    wmove(stdscr, x, y);
+    wmove(stdscr, y, x);
     va_list args;
     va_start(args, fmt);
     printw(fmt, args);
@@ -66,6 +71,8 @@ std::string remove_slash(std::string s) {
  * TODO: if more than one subfolder explore all.
  * TODO: if only one folder and then csvs asks for the language
  * TODO: if .csv only ask for language + deck.
+ * TODO: (important) REMOVE USED OF CHDIR since we should be able to add
+ * without moving inside the folder.
  */
 static void add_folder_or_file(const std::string &path) {
     language l;
@@ -165,6 +172,15 @@ static STATE update_deck_pressed() {
             l.expand_decks = !l.expand_decks;
             update_deck_browser_size();
             return STATE::DECK;
+        } else if (l.decks.size() + sz + 1 > deck_selected) {
+            sz += 1;
+            for (auto &[ignore, deck] : l.decks) {
+                if (sz == deck_selected) {
+                    current_deck = deck;
+                    update = true;
+                    return STATE::FLASH_CARD;
+                }
+            }
         } else {
             sz += 1 + (l.expand_decks ? l.decks.size() : 0);
         }
@@ -175,12 +191,14 @@ static STATE update_deck_pressed() {
 
 STATE update_deck_browser(int c, int width, int height) {
     if (update) {
+        clear();
         update_deck_browser_size();
         print_deck_browser(width, height);
         extern int terminal_width, terminal_height;
         int flash_card_w = terminal_width - width - 1;
         int config_w = flash_card_w / 4;
         print_config(width, config_w, terminal_width, terminal_height);
+        refresh();
     }
 
     switch(c) {
@@ -217,6 +235,58 @@ STATE update_deck_browser(int c, int width, int height) {
     return STATE::DECK;
 }
 
+size_t word_idx = 0;
+
+static void draw_box(int x, int y, int width, int height);
+
+static void print_flashcards() {
+    extern int terminal_width, terminal_height;
+    int from_x = (terminal_width / 3) - 1;
+    int from_y = terminal_height / 3;
+
+    int word_width = codepoints(current_deck.words[word_idx].untranslated.c_str());
+
+    from_x = from_x + (from_x - word_width- 2) / 2;
+
+    draw_box(from_x, from_y / 3, word_width + 2, 3);
+    std::string current_word = current_deck.words[word_idx].untranslated;
+    write(from_x + 1, (from_y / 3) + 1, current_word.c_str());
+
+    refresh();
+}
+
+
+
+STATE update_flashcards(int c) {
+    extern int terminal_width, terminal_height;
+    if (update) {
+        clear();
+        print_deck_browser(terminal_width / 3, terminal_height);
+        print_flashcards();
+        update = false;
+    }
+
+    switch (c) {
+        case 'n':
+            update = true;
+            break;
+        case 'p':
+            update = true;
+            break;
+        case 10:
+            break;
+        case 27: // ESCAPE
+            update = true;
+            return STATE::DECK;
+            break;
+        default:
+            break;
+    }
+
+    return STATE::FLASH_CARD;
+}
+
+
 static unsigned int is_bold(bool is_bold) {
     if (is_bold)
         return reverse_color | A_BOLD;
@@ -225,8 +295,6 @@ static unsigned int is_bold(bool is_bold) {
 }
 
 void print_deck_browser(int width, int height) {
-    clear();
-
     unsigned int blue_thin = COLOR_PAIR(2);
     unsigned int blue_thick = COLOR_PAIR(3);
     cwrite(0, 0, width, "Decks", reverse_color | A_BOLD);
@@ -249,19 +317,7 @@ void print_deck_browser(int width, int height) {
     for (int k = 1; k < height; k++) {
         mvaddch(k, width, blue_thin | ACS_VLINE);
     }
-
-    refresh();
 }
-
-std::vector<std::string> config_list {
-    "Decks   : 1",
-    "Browser : 2",
-    "Config  : 3",
-    "Add     : A",
-    "Select  : Enter",
-    "Delete  : Shift + D",
-    "Quit    : Esc / q",
-};
 
 // why isn't this part of ncurses??????
 static void draw_box(int x, int y, int width, int height) {
@@ -276,6 +332,15 @@ static void draw_box(int x, int y, int width, int height) {
     mvaddch(y + height, x + width, ACS_LRCORNER);
 }
 
+std::vector<std::string> global_config {
+    "Decks   : 1",
+    "Browser : 2",
+    "Config  : 3",
+    "Add     : A",
+    "Select  : Enter",
+    "Delete  : Shift + D",
+    "Quit    : Esc / q",
+};
 
 void print_config(int deck_tree_w, int config_w, int screen_width, int screen_height) {
     // TODO: wborder without target window
@@ -287,12 +352,12 @@ void print_config(int deck_tree_w, int config_w, int screen_width, int screen_he
     int y_window = (screen_height - flash_card_w / 9) / 2;
     int x_window =  deck_tree_w  + (flash_card_w - config_w) / 2;
 
-    int cfg_size = (int)config_list.size();
+    int cfg_size = (int)global_config.size();
 
     draw_box(x_window, y_window, config_w + 2, cfg_size + 3);
 
-    write(y_window, x_window + position, cfg.c_str());
-    for (size_t i = 0; i < config_list.size(); i++) {
-        write(y_window + (int)i + 2, x_window + 3, config_list[i].c_str());
+    write(x_window + position, y_window, cfg.c_str());
+    for (size_t i = 0; i < global_config.size(); i++) {
+        write(x_window + 3, y_window + (int)i + 2, global_config[i].c_str());
     }
 }

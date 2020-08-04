@@ -21,6 +21,7 @@ void cwrite(int x, int y, int width, const std::string &line, unsigned int attr 
 
 STATE update_filesystem_browser(int c, int width);
 STATE update_deck_browser(int c, int width, int height);
+STATE update_flashcards(int c);
 
 void print_filesystem_browser(int width);
 void print_deck_browser(int width, int height);

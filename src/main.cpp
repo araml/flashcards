@@ -57,7 +57,7 @@ int main() {
     //int config_w = flash_card_w / 4;
 
     nodelay(stdscr, true);
-
+    set_escdelay(25);
 
     //attron(COLOR_PAIR(0));
 
@@ -82,12 +82,11 @@ int main() {
             state = update_deck_browser(c, terminal_width / 3, terminal_height);
         } else if (state == STATE::QUIT) {
             break;
-        } else {
-
+        } else if (state == STATE::FLASH_CARD) {
+            state = update_flashcards(c);
         }
 
-        refresh();
-        std::this_thread::sleep_for(std::chrono::milliseconds{25});
+        //std::this_thread::sleep_for(std::chrono::milliseconds{25});
     }
 
     endwin();
